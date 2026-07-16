@@ -1,0 +1,11 @@
+defaults:
+  username_env: BIGIP_USERNAME
+  password_env: BIGIP_PASSWORD
+  verify_ssl: true
+  partition: laforge
+
+instances:
+
+  adc-zoh-tst-3:
+    host: adc-zoh-tst-3-m.etat-de-vaud.ch
+
