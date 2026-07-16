@@ -13,10 +13,15 @@ from app.services.inventory import BigIPInventory
 router = APIRouter()
 
 
-def add_log_context(record, **kwargs):
-    """Helper pour ajouter du contexte aux logs"""
-    record.extra_fields = kwargs
-    return record
+class ContextFilter(logging.Filter):
+    """Filter personnalisé pour ajouter du contexte aux logs"""
+    def __init__(self, **context):
+        super().__init__()
+        self.context = context
+    
+    def filter(self, record):
+        record.context = self.context
+        return True
 
 
 @router.post("/webhook", response_model=DeploymentResponse)
@@ -35,8 +40,8 @@ async def webhook(payload: dict) -> DeploymentResponse:
             validated_payload = WebhookPayload(**payload)
         except ValidationError as e:
             logger.warning(
-                "Invalid webhook payload",
-                extra={"error": str(e), "payload_keys": list(payload.keys())}
+                f"Invalid webhook payload: {e.error_count()} validation error(s)",
+                extra={"context": {"payload_keys": list(payload.keys())}}
             )
             raise HTTPException(
                 status_code=400,
@@ -49,7 +54,7 @@ async def webhook(payload: dict) -> DeploymentResponse:
         except (KeyError, TypeError) as e:
             logger.error(
                 f"Failed to parse BitbucketWebhook: {e}",
-                extra={"error_type": type(e).__name__}
+                extra={"context": {"error_type": type(e).__name__}}
             )
             raise HTTPException(
                 status_code=400,
@@ -59,8 +64,8 @@ async def webhook(payload: dict) -> DeploymentResponse:
         # ✅ Ignorer les événements non-PR merged
         if not hook.is_pr_merged:
             logger.info(
-                "Webhook ignored",
-                extra={"event_type": hook.event, "reason": "not pr:merged"}
+                f"Webhook ignored - event type: {hook.event}",
+                extra={"context": {"reason": "not pr:merged"}}
             )
             return DeploymentResponse(
                 status="ignored",
@@ -70,12 +75,12 @@ async def webhook(payload: dict) -> DeploymentResponse:
         # ✅ Logger les infos du webhook
         logger.info(
             "Webhook received for merged PR",
-            extra={
+            extra={"context": {
                 "project": hook.project,
                 "repository": hook.repository,
                 "pr_id": hook.pr_id,
                 "merge_commit": hook.merge_commit[:7],
-            }
+            }}
         )
         
         # ✅ Récupérer les fichiers modifiés
@@ -88,12 +93,12 @@ async def webhook(payload: dict) -> DeploymentResponse:
             )
             logger.info(
                 f"Found {len(files)} JSON configuration file(s)",
-                extra={"files": files[:5]}  # Log max 5 fichiers
+                extra={"context": {"files_count": len(files)}}
             )
         except Exception as e:
             logger.error(
                 f"Failed to fetch changed files from Bitbucket: {e}",
-                extra={"error_type": type(e).__name__}
+                extra={"context": {"error_type": type(e).__name__}}
             )
             raise HTTPException(
                 status_code=502,
@@ -104,7 +109,7 @@ async def webhook(payload: dict) -> DeploymentResponse:
         if not files:
             logger.info(
                 "No JSON configuration files found",
-                extra={"pr_id": hook.pr_id}
+                extra={"context": {"pr_id": hook.pr_id}}
             )
             return DeploymentResponse(
                 status="ignored",
@@ -117,7 +122,7 @@ async def webhook(payload: dict) -> DeploymentResponse:
         tasks = planner.create_tasks(hook, configs)
         logger.info(
             f"Created {len(tasks)} deployment task(s)",
-            extra={"tasks_count": len(tasks)}
+            extra={"context": {"tasks_count": len(tasks)}}
         )
         
         # ✅ Charger l'inventaire UNE SEULE FOIS
@@ -126,7 +131,7 @@ async def webhook(payload: dict) -> DeploymentResponse:
         except Exception as e:
             logger.error(
                 f"Failed to load BigIP inventory: {e}",
-                extra={"error_type": type(e).__name__}
+                extra={"context": {"error_type": type(e).__name__}}
             )
             raise HTTPException(
                 status_code=500,
@@ -141,11 +146,11 @@ async def webhook(payload: dict) -> DeploymentResponse:
             try:
                 logger.info(
                     f"Deploying task {idx}/{len(tasks)}",
-                    extra={
+                    extra={"context": {
                         "instance": task.instance,
                         "module": task.module,
-                        "filename": task.filename,
-                    }
+                        "config_file": task.filename,
+                    }}
                 )
                 
                 # Récupérer les credentials
@@ -155,8 +160,8 @@ async def webhook(payload: dict) -> DeploymentResponse:
                 bigip = BigIPClient(target)
                 token = bigip.authenticate()
                 logger.debug(
-                    f"Authenticated to BIG-IP",
-                    extra={"instance": task.instance}
+                    f"Authenticated to BIG-IP {task.instance}",
+                    extra={"context": {"instance": task.instance}}
                 )
                 
                 # Récupérer le fichier de configuration
@@ -166,15 +171,15 @@ async def webhook(payload: dict) -> DeploymentResponse:
                 result = bigip.deploy_as3(declaration)
                 logger.info(
                     f"Deployment successful",
-                    extra={
+                    extra={"context": {
                         "instance": task.instance,
-                        "filename": task.filename,
+                        "config_file": task.filename,
                         "status": result.get("status", "unknown")
-                    }
+                    }}
                 )
                 deployment_results.append({
                     "instance": task.instance,
-                    "filename": task.filename,
+                    "config_file": task.filename,
                     "status": "success",
                     "result": result
                 })
@@ -182,17 +187,17 @@ async def webhook(payload: dict) -> DeploymentResponse:
             except Exception as e:
                 failed_count += 1
                 logger.error(
-                    f"Deployment failed for {task.instance}/{task.filename}: {e}",
-                    extra={
+                    f"Deployment failed: {e}",
+                    extra={"context": {
                         "instance": task.instance,
-                        "filename": task.filename,
+                        "config_file": task.filename,
                         "error_type": type(e).__name__,
-                        "error_message": str(e)
-                    }
+                    }},
+                    exc_info=False
                 )
                 deployment_results.append({
                     "instance": task.instance,
-                    "filename": task.filename,
+                    "config_file": task.filename,
                     "status": "failed",
                     "error": str(e)
                 })
@@ -200,12 +205,12 @@ async def webhook(payload: dict) -> DeploymentResponse:
         # ✅ Résumé final
         logger.info(
             f"Deployment completed",
-            extra={
-                "total": len(tasks),
+            extra={"context": {
+                "total_tasks": len(tasks),
                 "successful": len(tasks) - failed_count,
                 "failed": failed_count,
                 "pr_id": hook.pr_id
-            }
+            }}
         )
         
         return DeploymentResponse(
@@ -224,7 +229,7 @@ async def webhook(payload: dict) -> DeploymentResponse:
     except Exception as e:
         logger.error(
             f"Unexpected error in webhook handler: {e}",
-            extra={"error_type": type(e).__name__},
+            extra={"context": {"error_type": type(e).__name__}},
             exc_info=True
         )
         raise HTTPException(
