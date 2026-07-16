@@ -1,5 +1,5 @@
 bitbucket:
-  url: https://dsigit.etat-de-vaud.ch/outils/git
+  url: https://xxxxxxxxx/outils/git
   verify_ssl: true
   ca_bundle: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 
