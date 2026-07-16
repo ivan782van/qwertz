@@ -22,8 +22,8 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
         
-        if hasattr(record, "extra_fields"):
-            log_data.update(record.extra_fields)
+        if hasattr(record, "context"):
+            log_data.update(record.context)
         
         return json.dumps(log_data, ensure_ascii=False)
 
@@ -58,11 +58,12 @@ class SimpleFormatter(logging.Formatter):
         if record.exc_info:
             base_message += "\n" + self.formatException(record.exc_info)
         
-        # Ajouter champs supplémentaires
-        if hasattr(record, "extra_fields"):
-            extra = record.extra_fields
-            extra_str = " | ".join(f"{k}={v}" for k, v in extra.items())
-            base_message += f" | {extra_str}"
+        # Ajouter champs supplémentaires (context)
+        # ⚠️ Éviter les noms réservés de LogRecord !
+        if hasattr(record, "context"):
+            context = record.context
+            context_str = " | ".join(f"{k}={v}" for k, v in context.items())
+            base_message += f" | {context_str}"
         
         return base_message
 
