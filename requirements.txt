@@ -17,14 +17,8 @@ pyyaml==6.0.3
 python-dotenv==1.2.2
 
 # ==========================================
-# Git
-# ==========================================
-GitPython==3.1.50
-
-# ==========================================
 # Note: The following are transitive dependencies
 # - starlette (via fastapi)
 # - pydantic_core (via pydantic)
-# - gitdb (via GitPython)
 # - h11, anyio, sniffio, click, etc. (various)
 # ==========================================

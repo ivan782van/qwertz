@@ -1,6 +1,7 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import ValidationError
+from typing import Optional
 
 from app.logger import logger
 from app.models.schemas import WebhookPayload, DeploymentResponse
@@ -9,6 +10,7 @@ from app.clients.bitbucket import BitbucketClient
 from app.clients.bigip import BigIPClient
 from app.services.planner import DeploymentPlanner
 from app.services.inventory import BigIPInventory
+from app.utils.webhook_security import verify_bitbucket_webhook_signature
 
 router = APIRouter()
 
@@ -25,17 +27,50 @@ class ContextFilter(logging.Filter):
 
 
 @router.post("/webhook", response_model=DeploymentResponse)
-async def webhook(payload: dict) -> DeploymentResponse:
+async def webhook(
+    request: Request,
+    x_hub_signature: Optional[str] = Header(None)
+) -> DeploymentResponse:
     """
     Reçoit les webhooks Bitbucket et déclenche les déploiements.
+    
+    **Sécurisé par signature HMAC-SHA256** (si BITBUCKET_WEBHOOK_SECRET configuré)
     
     - Filtre les événements (seulement PR merged)
     - Récupère les fichiers JSON modifiés
     - Déploie sur les instances BIG-IP correspondantes
+    
+    **Headers de sécurité**:
+    - `x-hub-signature`: Signature HMAC-SHA256 du webhook (format: sha256=...)
+    
+    **Exemple de test** (voir Tests Webhook ci-dessous):
+    ```bash
+    # Générer le secret:
+    SECRET="mon_secret_teste"
+    
+    # Créer le payload:
+    PAYLOAD='{"eventKey":"pr:merged","pullRequest":{...}}'
+    
+    # Générer la signature:
+    SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" -hex | cut -d' ' -f2)
+    
+    # Envoyer:
+    curl -X POST http://localhost:8000/api/webhook \\
+      -H "x-hub-signature: sha256=$SIGNATURE" \\
+      -H "Content-Type: application/json" \\
+      -d "$PAYLOAD"
+    ```
     """
     
     try:
-        # ✅ Validation du payload
+        # ✅ Lire le corps brut pour validation de la signature
+        payload_bytes = await request.body()
+        payload = await request.json()
+        
+        # ✅ Vérifier la signature du webhook (lève 401 si invalide)
+        verify_bitbucket_webhook_signature(payload_bytes, x_hub_signature)
+        
+        # ✅ Validation du payload Pydantic
         try:
             validated_payload = WebhookPayload(**payload)
         except ValidationError as e:
