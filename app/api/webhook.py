@@ -1,11 +1,6 @@
 from fastapi import APIRouter, HTTPException
-
-from app.models.bitbucket import BitbucketWebhook
-from app.models import BitbucketWebhook, ConfigurationFile
 from app.clients.bitbucket import BitbucketClient
-from app.services.planner import DeploymentPlanner
 from app.models import DeploymentTask
-from app.services.inventory import BigIPInventory
 from app.clients.bigip import BigIPClient
 
 router = APIRouter()
