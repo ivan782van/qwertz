@@ -1,7 +1,7 @@
 import logging
-from fastapi import APIRouter, HTTPException, Request, Header
-from pydantic import ValidationError
-from typing import Optional
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field, ValidationError
+from typing import Optional, Dict, Any
 
 from app.logger import logger
 from app.models.schemas import WebhookPayload, DeploymentResponse
@@ -10,65 +10,104 @@ from app.clients.bitbucket import BitbucketClient
 from app.clients.bigip import BigIPClient
 from app.services.planner import DeploymentPlanner
 from app.services.inventory import BigIPInventory
-from app.utils.webhook_security import verify_bitbucket_webhook_signature
+from app.utils.webhook_security import verify_bitbucket_webhook_signature_raw
 
 router = APIRouter()
 
 
-class ContextFilter(logging.Filter):
-    """Filter personnalisé pour ajouter du contexte aux logs"""
-    def __init__(self, **context):
-        super().__init__()
-        self.context = context
+class WebhookRequest(BaseModel):
+    """
+    Format simplifié pour tester les webhooks dans Swagger.
     
-    def filter(self, record):
-        record.context = self.context
-        return True
+    Le champ 'x_hub_signature' est optionnel :
+    - Vide/null en développement (pas de sécurité)
+    - Format "sha256=..." en production (sécurité)
+    """
+    payload: Dict[str, Any] = Field(
+        description="Le payload Bitbucket webhook",
+        example={
+            "eventKey": "pr:merged",
+            "pullRequest": {
+                "id": 123,
+                "toRef": {
+                    "repository": {
+                        "project": {"key": "PROJ"},
+                        "slug": "my-repo"
+                    }
+                },
+                "properties": {
+                    "mergeCommit": {"id": "abc123def456"}
+                }
+            }
+        }
+    )
+    x_hub_signature: Optional[str] = Field(
+        default=None,
+        description="Signature HMAC-SHA256 (optionnel en dev, obligatoire en prod si secret configuré). Format: 'sha256=abcd1234...'",
+        example="sha256=c3383246d4fd871e66e962b50cc12222222222222222222222222222222222"
+    )
 
 
 @router.post("/webhook", response_model=DeploymentResponse)
-async def webhook(
-    request: Request,
-    x_hub_signature: Optional[str] = Header(None)
-) -> DeploymentResponse:
+async def webhook(request: WebhookRequest) -> DeploymentResponse:
     """
-    Reçoit les webhooks Bitbucket et déclenche les déploiements.
+    🔌 Webhook Bitbucket - Reçoit les événements et déclenche les déploiements
     
-    **Sécurisé par signature HMAC-SHA256** (si BITBUCKET_WEBHOOK_SECRET configuré)
+    **Sécurité** :
+    - Signature HMAC-SHA256 vérifiée automatiquement (si BITBUCKET_WEBHOOK_SECRET configuré)
+    - En développement: laisser x_hub_signature vide
+    - En production: TOUJOURS fournir une signature valide
     
-    - Filtre les événements (seulement PR merged)
-    - Récupère les fichiers JSON modifiés
-    - Déploie sur les instances BIG-IP correspondantes
+    **Fonctionnalités** :
+    - ✅ Filtre les événements (seulement PR merged)
+    - ✅ Récupère les fichiers JSON modifiés depuis Bitbucket
+    - ✅ Déploie sur les instances BIG-IP
+    - ✅ Logging structuré
     
-    **Headers de sécurité**:
-    - `x-hub-signature`: Signature HMAC-SHA256 du webhook (format: sha256=...)
+    **Exemple de test dans Swagger** :
+    ```json
+    {
+      "payload": {
+        "eventKey": "pr:merged",
+        "pullRequest": {
+          "id": 123,
+          "toRef": {
+            "repository": {
+              "project": {"key": "PROJ"},
+              "slug": "my-repo"
+            }
+          },
+          "properties": {
+            "mergeCommit": {"id": "abc123def456"}
+          }
+        }
+      },
+      "x_hub_signature": null
+    }
+    ```
     
-    **Exemple de test** (voir Tests Webhook ci-dessous):
+    **Exemple avec signature valide** :
     ```bash
-    # Générer le secret:
-    SECRET="mon_secret_teste"
-    
-    # Créer le payload:
-    PAYLOAD='{"eventKey":"pr:merged","pullRequest":{...}}'
-    
-    # Générer la signature:
+    # Terminal - générer la signature
+    SECRET="your_secret"
+    PAYLOAD='{"eventKey":"pr:merged",...}'
     SIGNATURE=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$SECRET" -hex | cut -d' ' -f2)
+    echo "sha256=$SIGNATURE"
     
-    # Envoyer:
-    curl -X POST http://localhost:8000/api/webhook \\
-      -H "x-hub-signature: sha256=$SIGNATURE" \\
-      -H "Content-Type: application/json" \\
-      -d "$PAYLOAD"
+    # Copier/coller dans le champ x_hub_signature du Swagger
     ```
     """
     
     try:
-        # ✅ Lire le corps brut pour validation de la signature
-        payload_bytes = await request.body()
-        payload = await request.json()
+        # ✅ Lire le payload
+        payload = request.payload
+        
+        # ✅ Convertir payload en bytes pour la vérification de signature
+        import json
+        payload_bytes = json.dumps(payload, separators=(',', ':')).encode()
         
         # ✅ Vérifier la signature du webhook (lève 401 si invalide)
-        verify_bitbucket_webhook_signature(payload_bytes, x_hub_signature)
+        verify_bitbucket_webhook_signature_raw(payload_bytes, request.x_hub_signature)
         
         # ✅ Validation du payload Pydantic
         try:
@@ -223,11 +262,13 @@ async def webhook(
                 failed_count += 1
                 logger.error(
                     f"Deployment failed: {e}",
-                    extra={"context": {
-                        "instance": task.instance,
-                        "config_file": task.filename,
-                        "error_type": type(e).__name__,
-                    }},
+                    extra={
+                        "context": {
+                            "instance": task.instance,
+                            "config_file": task.filename,
+                            "error_type": type(e).__name__,
+                        }
+                    },
                     exc_info=False
                 )
                 deployment_results.append({

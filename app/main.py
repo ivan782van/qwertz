@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from app.api.webhook import router as webhook_router
-from app.api.testing import router as testing_router
 from app.logger import logger
 from app.models.schemas import HealthResponse
 
@@ -12,7 +11,6 @@ app = FastAPI(
 
 # Inclure les routers
 app.include_router(webhook_router, prefix="/api", tags=["Webhooks"])
-app.include_router(testing_router, prefix="/api", tags=["Testing"])
 
 
 @app.get("/health", response_model=HealthResponse)

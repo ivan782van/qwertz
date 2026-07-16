@@ -1,7 +1,6 @@
 import hmac
 import hashlib
-import json
-from fastapi import HTTPException, Header
+from fastapi import HTTPException
 from typing import Optional
 from app.logger import logger
 import os
@@ -10,40 +9,43 @@ import os
 BITBUCKET_WEBHOOK_SECRET = os.getenv("BITBUCKET_WEBHOOK_SECRET", "").strip()
 
 
-def verify_bitbucket_webhook_signature(
+def verify_bitbucket_webhook_signature_raw(
     payload_bytes: bytes,
-    x_hub_signature: Optional[str] = Header(None)
+    x_hub_signature: Optional[str] = None
 ) -> bool:
     """
     Vérifie la signature HMAC-SHA256 du webhook Bitbucket.
     
+    Cette fonction accepte directement les bytes du payload et la signature,
+    ce qui la rend compatible avec Swagger et les tests.
+    
     Documentation: https://bitbucket.org/product/features/webhooks
     
     Args:
-        payload_bytes: Le corps brut de la requête POST
-        x_hub_signature: Header 'x-hub-signature' de la requête
-                        Format: "sha256=hex_digest"
+        payload_bytes: Le corps brut de la requête (encoded en UTF-8)
+        x_hub_signature: Signature HMAC du header 'x-hub-signature'
+                        Format: "sha256=hex_digest" ou None
     
     Returns:
-        True si la signature est valide, sinon lève HTTPException
+        True si la signature est valide ou pas de secret configuré
     
     Raises:
-        HTTPException 401: Signature invalide ou manquante
+        HTTPException 401: Signature invalide ou manquante (en prod)
         HTTPException 400: Format de signature invalide
     """
     
     # Si pas de secret configuré, accepter tous les webhooks (mode développement)
     if not BITBUCKET_WEBHOOK_SECRET:
-        logger.warning(
-            "⚠️  BITBUCKET_WEBHOOK_SECRET not configured - webhook signature verification DISABLED",
+        logger.debug(
+            "⚠️  BITBUCKET_WEBHOOK_SECRET not configured - signature verification DISABLED",
             extra={"context": {"security_mode": "disabled"}}
         )
         return True
     
-    # Vérifier que le header est présent
+    # En production (secret configuré), vérifier la signature
     if not x_hub_signature:
         logger.error(
-            "🚨 Missing x-hub-signature header - possible attack attempt",
+            "🚨 Missing x-hub-signature - webhook rejected",
             extra={"context": {"header": "x-hub-signature"}}
         )
         raise HTTPException(
@@ -76,10 +78,10 @@ def verify_bitbucket_webhook_signature(
         # Comparer de façon sécurisée (timing-safe comparison)
         if not hmac.compare_digest(expected_signature, received_signature):
             logger.error(
-                "🚨 Webhook signature mismatch - possible tampering detected",
+                "🚨 Webhook signature mismatch - tampering detected",
                 extra={"context": {
-                    "received_signature": received_signature[:16] + "..." if len(received_signature) > 16 else "***",
-                    "expected_signature": expected_signature[:16] + "..." if len(expected_signature) > 16 else "***"
+                    "received": received_signature[:16] + "..." if len(received_signature) > 16 else "***",
+                    "expected": expected_signature[:16] + "..." if len(expected_signature) > 16 else "***"
                 }}
             )
             raise HTTPException(
@@ -87,23 +89,14 @@ def verify_bitbucket_webhook_signature(
                 detail="Unauthorized: Invalid webhook signature"
             )
         
-        logger.debug("✅ Webhook signature verified successfully")
+        logger.info("✅ Webhook signature verified")
         return True
         
     except HTTPException:
-        # Re-lever les exceptions HTTP
         raise
     except Exception as e:
-        logger.error(f"Error validating signature: {e}", extra={"context": {"error": str(e)}})
+        logger.error(f"Error validating signature: {e}")
         raise HTTPException(
             status_code=400,
             detail=f"Invalid signature format: {str(e)}"
         )
-
-
-async def get_raw_body(request) -> bytes:
-    """
-    Récupère le corps brut d'une requête FastAPI.
-    Utilisé pour la validation de signature HMAC.
-    """
-    return await request.body()
