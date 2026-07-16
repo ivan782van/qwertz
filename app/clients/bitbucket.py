@@ -1,19 +1,38 @@
 import os
 import json
 import requests
-from app.config import CONFIG
+from pathlib import Path
 from app.logger import logger
+from app.config import (
+    BITBUCKET_URL,
+    BITBUCKET_TOKEN,
+    BITBUCKET_VERIFY_SSL,
+    BITBUCKET_CA_BUNDLE
+)
+
 
 class BitbucketClient:
 
     def __init__(self):
-        self.base_url = CONFIG["bitbucket"]["url"]
+        self.base_url = BITBUCKET_URL
         self.headers = {
-            "Authorization": f"Bearer {os.getenv('BITBUCKET_TOKEN')}"
+            "Authorization": f"Bearer {BITBUCKET_TOKEN}"
         }
-        if CONFIG["bitbucket"].get("verify_ssl", True):
-            self.verify = CONFIG["bitbucket"]["ca_bundle"]
+        
+        # Configurer la vérification SSL
+        if BITBUCKET_VERIFY_SSL:
+            # Vérifier si le fichier CA existe
+            if Path(BITBUCKET_CA_BUNDLE).exists():
+                self.verify = BITBUCKET_CA_BUNDLE
+                logger.debug(f"Using CA bundle: {BITBUCKET_CA_BUNDLE}")
+            else:
+                logger.warning(
+                    f"CA bundle not found at {BITBUCKET_CA_BUNDLE}, "
+                    "using system certificates"
+                )
+                self.verify = True
         else:
+            logger.warning("SSL verification disabled for Bitbucket")
             self.verify = False
 
     def get_changes(self, project, repository, pr_id):
@@ -23,7 +42,7 @@ class BitbucketClient:
             f"/repos/{repository}"
             f"/pull-requests/{pr_id}/changes"
         )
-        logger.debug(f"Fetching changes for PR {pr_id}")  # Sans l'URL !
+        logger.debug(f"Fetching changes for PR {pr_id}")
         response = requests.get(
             url,
             headers=self.headers,
@@ -54,7 +73,7 @@ class BitbucketClient:
             f"?at={task.merge_commit}"
         )
         
-        logger.debug(f"Downloading file: {task.path}")  # Plus secure
+        logger.debug(f"Downloading file: {task.path}")
         
         response = requests.get(
             url,

@@ -1,15 +1,32 @@
 import requests
+from pathlib import Path
+from app.logger import logger
+from app.config import (
+    BIGIP_VERIFY_SSL,
+    BIGIP_CA_BUNDLE
+)
 
-from app.config import CONFIG
 
 class BigIPClient:
 
     def __init__(self, inventory):
         self.inventory = inventory
         self.session = requests.Session()
-        if CONFIG["bigip"].get("verify_ssl", True):
-            self.session.verify = CONFIG["bigip"]["ca_bundle"]
+        
+        # Configurer la vérification SSL
+        if BIGIP_VERIFY_SSL:
+            # Vérifier si le fichier CA existe
+            if Path(BIGIP_CA_BUNDLE).exists():
+                self.session.verify = BIGIP_CA_BUNDLE
+                logger.debug(f"Using CA bundle: {BIGIP_CA_BUNDLE}")
+            else:
+                logger.warning(
+                    f"CA bundle not found at {BIGIP_CA_BUNDLE}, "
+                    "using system certificates"
+                )
+                self.session.verify = True
         else:
+            logger.warning("SSL verification disabled for BIG-IP")
             self.session.verify = False
 
     def deploy_as3(self, declaration):
@@ -47,21 +64,3 @@ class BigIPClient:
         token = response.json()["token"]["token"]
         self.session.headers["X-F5-Auth-Token"] = token
         return token
-
-class BigIP:
-
-    def __init__(self, host, username, password):
-        self.host = host
-        self.username = username
-        self.password = password
-
-    def deploy(self, declaration):
-        url = f"https://{self.host}/mgmt/shared/appsvcs/declare"
-        response = requests.post(
-            url,
-            json=declaration,
-            auth=(self.username, self.password),
-            verify=False
-        )
-
-        return response.json()

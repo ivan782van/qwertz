@@ -1,9 +1,16 @@
+# ==========================================
+# Configuration pour le projet qwertz
+# ==========================================
+# 
+# Les variables SSL/TLS sont désormais gérées
+# via les variables d'environnement (.env)
+# 
+# Voir .env.example pour les détails
+
+# Cette section est conservée pour compatibilité
 bitbucket:
-  url: https://xxxxxxxxx/outils/git
-  verify_ssl: true
-  ca_bundle: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
+  url: https://bitbucket.company.net
 
 bigip:
-  verify_ssl: true
-  ca_bundle: /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
-
+  # Configuration BIG-IP
+  # Les credentials et SSL sont gérés via .env
