@@ -1,10 +1,14 @@
+import logging 
 import requests
 from pathlib import Path
 from app.logger import logger
+from app.services.notification import send_deploy_notification
 from app.config import (
     BIGIP_VERIFY_SSL,
     BIGIP_CA_BUNDLE
 )
+
+LOG = logging.getLogger(__name__)
 
 
 class BigIPClient:
@@ -41,7 +45,29 @@ class BigIPClient:
             json=declaration,
             timeout=300
         )
-        response.raise_for_status()
+        try:
+            response = self.session.post(url, json=declaration, timeout=300)
+            response.raise_for_status()
+
+            # Notification de succès (non bloquante)
+            try:
+                instance = self.inventory.get("name", self.inventory.get("host"))
+                filename = declaration.get("file_name") if isinstance(declaration, dict) else None
+                send_deploy_notification(True, instance=instance, filename=filename, message="AS3 declaration applied")
+            except Exception:
+                LOG.exception("Erreur lors de l'envoi de la notification de succès")
+
+            return response.json()
+        except requests.RequestException as e:
+            # Notification d'erreur
+            try:
+                instance = self.inventory.get("name", self.inventory.get("host"))
+                filename = declaration.get("file_name") if isinstance(declaration, dict) else None
+                send_deploy_notification(False, instance=instance, filename=filename, message="AS3 declaration failed", error=e)
+            except Exception:
+                LOG.exception("Erreur lors de l'envoi de la notification d'erreur")
+            # Ré-élever pour conserver comportement existant
+            raise
 
         return response.json()
 

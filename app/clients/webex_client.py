@@ -1,5 +1,5 @@
 """
-Client Webex léger (synchronisé) pour envoyer du markdown vers Webex Teams (Webex).
+Client Webex léger (synchronisé) pour envoyer un markdown vers Webex Teams.
 Utilise requests avec retry + backoff exponentiel.
 """
 import logging

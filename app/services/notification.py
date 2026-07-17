@@ -1,7 +1,7 @@
 """
-Service de notification pour événements de déploiement.
-Formate un message markdown et appelle le client Webex.
-Ne doit jamais faire échouer la logique métier : les erreurs d'envoi sont loggées.
+Service de notification pour événements de déploiement AS3.
+Format Markdown : date UTC, instance, fichier/tâche, status (success/error).
+En cas d'erreur, inclut le détail (stack trace ou message), tronqué si trop long.
 """
 import os
 import traceback
@@ -12,7 +12,7 @@ import logging
 from app.clients import webex_client
 
 LOG = logging.getLogger(__name__)
-_TRUNCATE_LIMIT = 6000
+_TRUNCATE_LIMIT = 6000  # caractères max pour le détail d'erreur
 
 
 def _maybe_truncate(text: Optional[str], limit: int = _TRUNCATE_LIMIT) -> Optional[str]:
@@ -47,13 +47,12 @@ def _format_markdown(status: str, instance: str, filename: Optional[str] = None,
 
 
 def _read_config():
-    """Lit la configuration depuis les env vars (fallback si app/config.py absent)."""
     enabled = os.getenv("WEBEX_ENABLED", "false").lower() in ("1", "true", "yes")
     token = os.getenv("WEBEX_BOT_TOKEN")
     room = os.getenv("WEBEX_ROOM_ID")
     api_url = os.getenv("WEBEX_API_URL", "https://webexapis.com/v1/messages")
     verify = os.getenv("WEBEX_VERIFY_SSL", "true").lower() in ("1", "true", "yes")
-    # Proxies supportés via standard env vars HTTP_PROXY/HTTPS_PROXY
+    # Proxies via standard env vars
     proxies = {}
     http_proxy = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
     https_proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
