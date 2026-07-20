@@ -96,3 +96,9 @@ helm/**/.helmignore
 # ==========================================
 
 .cache/
+
+#
+# Payload exemple
+#
+
+.*.payload
