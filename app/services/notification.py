@@ -6,8 +6,12 @@ En cas d'erreur, inclut le détail (stack trace ou message), tronqué si trop lo
 import os
 import traceback
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Optional
 import logging
+
+LAUSANNE_TZ = ZoneInfo("Europe/Zurich")  
+
 
 from app.clients import webex_client
 
@@ -24,13 +28,14 @@ def _maybe_truncate(text: Optional[str], limit: int = _TRUNCATE_LIMIT) -> Option
 
 
 def _format_markdown(status: str, instance: str, filename: Optional[str] = None, message: Optional[str] = None, error: Optional[str] = None) -> str:
-    now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    now = datetime.now(LAUSANNE_TZ).replace(microsecond=0).isoformat()
     lines = [
         f"**Alerte de déploiement - {status.upper()}**",
         "",
-        f"- **Date (UTC)**: {now}",
+        f"- **Date**: {now}",
         f"- **Instance**: {instance}",
     ]
+
     if filename:
         lines.append(f"- **Fichier / tâche**: `{filename}`")
     lines.append(f"- **Status**: **{status}**")
