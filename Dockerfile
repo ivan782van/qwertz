@@ -1,6 +1,10 @@
 FROM registry.access.redhat.com/ubi9/python-312-minimal:9.8-1784139779
 COPY certs/company-ca.crt /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem
 
+USER root
+RUN microdnf install -y tzdata && microdnf clean all
+USER 1001
+
 WORKDIR /app
 
 COPY requirements.txt .
