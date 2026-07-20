@@ -12,7 +12,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY --chmod=775 app app
-COPY --chmod=775 config config
 COPY --chmod=775 inventory inventory
 
 CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8080"]
