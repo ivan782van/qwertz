@@ -1,0 +1,152 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Version control
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode specific
+.history/
+.vscode-settings.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Testing
+.pytest_cache/
+.tox/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+test-results/
+junit.xml
+
+# Documentation
+docs/_build/
+site/
+
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Docker
+docker-compose.override.yml
+Dockerfile*
+.dockerignore
+.docker/
+
+# CI/CD
+.github/workflows/
+.gitlab-ci/
+.circleci/
+azure-pipelines.yml
+Jenkinsfile
+
+# Environment files (local dev only)
+.env.local
+.env
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env.secret
+
+# Kubernetes/Helm (development)
+k8s/
+helm/
+kustomization/
+manifests/
+
+# Build artifacts
+*.tar.gz
+*.zip
+*.rar
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Development
+README_DEV.md
+DEVELOPMENT.md
+TODO.md
+NOTES.md
