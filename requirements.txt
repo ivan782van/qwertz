@@ -28,3 +28,5 @@ GitPython==3.1.50
 # - gitdb (via GitPython)
 # - h11, anyio, sniffio, click, etc. (various)
 # ==========================================
+
+tzdata
