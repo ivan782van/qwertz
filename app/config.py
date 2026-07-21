@@ -8,22 +8,6 @@ ENV_PATH = Path(__file__).parent.parent / ".env"
 load_dotenv(ENV_PATH)
 
 # ==========================================
-# CHEMINS
-# ==========================================
-
-config_path = os.getenv(
-    "CONFIG_PATH",
-    str(Path(__file__).parent.parent / "config" / "config.yaml")
-)
-
-try:
-    with open(config_path, "r") as f:
-        CONFIG = yaml.safe_load(f)
-except FileNotFoundError:
-    raise RuntimeError(f"Configuration file not found: {config_path}")
-
-
-# ==========================================
 # BITBUCKET
 # ==========================================
 
